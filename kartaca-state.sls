@@ -133,7 +133,7 @@ install_php_packages:
 nginx_config:
   file.managed:
     - name: /etc/nginx/nginx.conf
-    - source: salt://nginx/nginx.conf
+    - source: salt://files/nginx.conf
     - user: root
     - group: root
     - mode: 644
@@ -171,7 +171,7 @@ nginx-config-test:
 manage_nginx_conf:
   file.managed:
     - name: /etc/nginx/nginx.conf 
-    - source: salt://nginx/nginx.conf
+    - source: salt://files/nginx.conf
     - source_hash_name: sha256  
     - makedirs: True
     - watch_in:
