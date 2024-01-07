@@ -127,13 +127,11 @@ download_wordpress_archive:
         if [ -d "/var/www/wordpress2023" ]; then
           curl -o /tmp/wordpress.tar.gz https://wordpress.org/latest.tar.gz
           tar -zxvf /tmp/wordpress.tar.gz -C /var/www/
-          chown -R www-data:www-data /var/www/wordpress2023
           chmod -R 755 /var/www/wordpress2023
         else
           mkdir -p /var/www/wordpress2023
           curl -o /tmp/wordpress.tar.gz https://wordpress.org/latest.tar.gz
           tar -zxvf /tmp/wordpress.tar.gz -C /var/www/
-          chown -R www-data:www-data /var/www/wordpress2023
           chmod -R 755 /var/www/wordpress2023
         fi
 
@@ -382,4 +380,3 @@ backup_cron:
       - file: backup_directory
 
 {% endif %}
-
