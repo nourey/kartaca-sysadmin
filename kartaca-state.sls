@@ -1,16 +1,12 @@
-{% set kartaca_user = salt['pillar.get']('kartaca:lookup:name') %}
-{% set kartaca_password = salt['pillar.get']('kartaca:lookup:password') %}
 
-
-{% set nginx_conf_path = '/etc/nginx/nginx.conf' %}
-
-
-# Set username, password and default shell
-# True
-
+# To create a user, first creating the group
 create_group:
   group.present:
     - gid: 2023
+
+# Creating kartaca user with pillar data
+{% set kartaca_user = salt['pillar.get']('kartaca:lookup:name') %}
+{% set kartaca_password = salt['pillar.get']('kartaca:lookup:password') %}
 
 create_user_and_set_password:
   user.present:
@@ -22,36 +18,33 @@ create_user_and_set_password:
     - shell: /bin/bash
 
 # Add user to sudoers
-# True
 configure_sudo:
   file.append:
     - name: /etc/sudoers
     - text: |
-        {% if grains['os_family'] == 'Debian' %}
+        {% if grains['os'] == 'Ubuntu' %}
         {{ kartaca_user }} ALL=(ALL) NOPASSWD: /usr/bin/apt
-        {% elif grains['os_family'] == 'RedHat' %}
+        {% elif grains['os'] == 'CentOS Stream' %}
         {{ kartaca_user }} ALL=(ALL) NOPASSWD: /usr/bin/yum
         {% endif %}
 
 # Set timezone
-# True
 set_timezone:
   timezone.system:
     - name: Europe/Istanbul
 
 # IP Forwarding
-# True
 enable_ip_forwarding:
   sysctl.present:
     - name: net.ipv4.ip_forward
     - value: 1
 
 # Insall packages
-# True
+
 install_required_packages:
   pkg.installed:
     - names:
-        {% if grains['os_family'] == 'Debian' %}
+        {% if grains['os'] == 'Ubuntu' %}
         - htop
         - tcptraceroute
         - net-tools
@@ -59,7 +52,7 @@ install_required_packages:
         - sysstat
         - unzip
         - curl
-        {% elif grains['os_family'] == 'RedHat' %}
+        {% elif grains['os'] == 'CentOS Stream' %}
         - wget
         - htop
         - traceroute
@@ -69,7 +62,6 @@ install_required_packages:
         {% endif %}
 
 # Add IP addresses 
-# True
 add_hosts_records:
   file.blockreplace:
     - name: /etc/hosts
@@ -80,11 +72,10 @@ add_hosts_records:
         192.168.168.{{ i }} kartaca.local
         {% endfor %}
     - append_if_not_found: True
-    - backup: '.bak'
+    - backup: '.bak' # Including recovery option
 
 # OS selection
-# True
-{% if grains['os'] == 'CentOS' %}
+{% if grains['os'] == 'CentOS Stream' %}
 
 install_hashicorp_terraform:
   cmd.run:
@@ -129,23 +120,7 @@ install_php_packages:
     - require:
       - cmd: enable_php_module    
 
-
-nginx_config:
-  file.managed:
-    - name: /etc/nginx/nginx.conf
-    - source: salt://files/nginx.conf
-    - user: root
-    - group: root
-    - mode: 644
-    - template: jinja
-    - require:
-      - pkg: nginx
-    - watch_in:
-      - service: nginx
-
-
 # Download Wordpress
-# True 
 download_wordpress_archive:
   cmd.run:
     - name: |
@@ -162,6 +137,8 @@ download_wordpress_archive:
           chmod -R 755 /var/www/wordpress2023
         fi
 
+# Every time nginx.conf is updated 
+# nginx service will be restarted 
 nginx-config-test:
   module.wait:
     - name: nginx.configtest
@@ -171,7 +148,7 @@ nginx-config-test:
 manage_nginx_conf:
   file.managed:
     - name: /etc/nginx/nginx.conf 
-    - source: salt://files/nginx.conf
+    - source: salt://nginx/nginx.conf
     - source_hash_name: sha256  
     - makedirs: True
     - watch_in:
@@ -208,8 +185,6 @@ update_wp_pillar:
       - file: {{ wordpress_config_file }}
 
 {% set api_url = 'https://api.wordpress.org/secret-key/1.1/salt/' %}
-
-
 create_wordpress_config:
   cmd.run:
     - name: |
@@ -243,7 +218,7 @@ create_wordpress_config:
 
         config_file="/var/www/wordpress2023/wordpress/wp-config-sample.php"
 
-        # Define patterns to delete
+        # Defining patterns to delete
         patterns=(
           "define( 'AUTH_KEY',         '.*' );"
           "define( 'SECURE_AUTH_KEY',  '.*' );"
@@ -276,21 +251,18 @@ execute_wordpress_config:
     - require:
       - cmd: create_wordpress_config
 
-
 {% set ssl_dir = '/etc/nginx/ssl' %}
 {% set cert_name = 'example.com' %}
-
 create_ssl_certificate:
   cmd.run:
     - name: |
         mkdir -p {{ ssl_dir }}
         openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout {{ ssl_dir }}/{{ cert_name }}.key -out {{ ssl_dir }}/{{ cert_name }}.crt -subj "/C=US/ST=State/L=City/O=Organization/OU=Unit/CN={{ cert_name }}"
 
-nginx_config:
-  file.append:
+nginx_config_edit:
+  file.line:
     - name: /etc/nginx/nginx.conf
-    - text: |
-        server {
+    - content: |
             listen 443 ssl;
             server_name localhost;
 
@@ -301,7 +273,9 @@ nginx_config:
                 root /usr/share/nginx/html;
                 index index.html index.htm;
                 }
-          }
+    - before: '        location ~ \.php$ {'
+    - mode: insert
+    - show_changes: True
 
 nginx_restart:
   service.running:
@@ -345,7 +319,6 @@ install_hashicorp_terraform:
         mv /tmp/terraform /usr/local/bin
     - shell: /bin/bash
 
-
 install_mysql_on_ubuntu:
   pkg.installed:
     - names: 
@@ -361,29 +334,17 @@ install_mysql_python_packages:
     - names:
       - pymysql
       - mysqlclient
-      # - configparser
-      # - MySQL-python
 
 configure_mysql_autostart:
   service.running:
     - name: mysql
     - enable: True
 
-
 {% set mysql_user = salt['pillar.get']('mysql:lookup:user') %}
 {% set mysql_password = salt['pillar.get']('mysql:lookup:password') %}
-{% set mysql_name = salt['pillar.get']('mysql:lookup:name') %}
 {% set mysql_host = salt['pillar.get']('mysql:lookup:host') %}
+{% set mysql_name = salt['pillar.get']('mysql:lookup:name') %}
 
-# /srv/salt/echo_variables.sls
-echo_mysql_variables:
-  cmd.run:
-    - name: |
-        echo "MySQL User: {{ mysql_user }}"
-        echo "MySQL Password: {{ mysql_password }}"
-        echo "MySQL Database: {{ mysql_name }}"
-        echo "MySQL Host: {{ mysql_host }}"
-      
 testdb:
   mysql_database.present:
     - name: {{ mysql_name }}
@@ -410,7 +371,6 @@ backup_directory:
     - require:
       - pkg: mysql-client
 
-# mysql_backup_cron:
 backup_cron:
   cron.present:
     - name: "/usr/bin/mysqldump -u {{ mysql_user }} -p {{ mysql_password }} {{ mysql_name }} > /backup/mysql_backup_$(date +\\%Y\\%m\\%d).sql"
@@ -421,5 +381,5 @@ backup_cron:
       - pkg: mysql-client
       - file: backup_directory
 
-
 {% endif %}
+
