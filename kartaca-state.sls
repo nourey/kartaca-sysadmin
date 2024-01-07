@@ -160,12 +160,13 @@ reload-nginx:
     - watch:
       - module: nginx-config-test
 
+{% set wordpress_config_file = '/var/www/wordpress2023/wordpress/wp-config-sample.php' %}
 manage_wp_config:
   file.managed:
-    - name: /var/www/wordpress2023/wordpress/wp-config-sample.php
+    - name: {{ wordpress_config_file }}
     - mode: 644  
 
-{% set wordpress_config_file = '/var/www/wordpress2023/wordpress/wp-config-sample.php' %}
+
 {% set mysql_user = salt['pillar.get']('mysql:lookup:user') %}
 {% set mysql_password = salt['pillar.get']('mysql:lookup:password') %}
 {% set mysql_host = salt['pillar.get']('mysql:lookup:host') %}
